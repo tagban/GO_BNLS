@@ -1,19 +1,41 @@
 // Command openbnls runs the BNLS server.
-//
-// Phase 0 scaffold: prints its intended listen address and exits. The real
-// accept loop, opcode handlers, and CheckRevision implementation land in
-// later phases — see the project README's Roadmap section.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
+
+	"github.com/tagban/GO_BNLS/internal/config"
+	"github.com/tagban/GO_BNLS/internal/profiles"
+	"github.com/tagban/GO_BNLS/internal/server"
 )
 
 func main() {
-	listenAddr := flag.String("listen", ":9367", "address to listen on (default BNLS port)")
+	configPath := flag.String("config", "", "path to a JSON config file (built-in defaults used if omitted)")
 	flag.Parse()
 
-	fmt.Fprintf(os.Stdout, "openbnls: scaffold build, would listen on %s (not yet implemented)\n", *listenAddr)
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+
+	cfg := config.Default()
+	if *configPath != "" {
+		loaded, err := config.Load(*configPath)
+		if err != nil {
+			logger.Fatalf("loading config: %v", err)
+		}
+		cfg = loaded
+	}
+
+	catalog, err := profiles.LoadCatalog(cfg.ProfilesDirectory, cfg.DefaultProfileIDByProduct)
+	if err != nil {
+		logger.Fatalf("loading profiles from %q: %v", cfg.ProfilesDirectory, err)
+	}
+	logger.Printf("loaded %d profile(s) from %s", catalog.Len(), cfg.ProfilesDirectory)
+
+	srv := server.New(catalog, cfg.SharedSecret, logger)
+	addr := fmt.Sprintf(":%d", cfg.ListenPort)
+	if err := srv.ListenAndServe(addr); err != nil {
+		logger.Fatalf("server: %v", err)
+	}
 }

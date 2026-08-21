@@ -44,6 +44,12 @@ func (w *Writer) WriteNTString(text string) *Writer {
 	return w
 }
 
+// Bytes returns the accumulated payload as-is, with no framing header —
+// useful for building a sub-blob to embed in a larger Writer via WriteBytes.
+func (w *Writer) Bytes() []byte {
+	return w.buf
+}
+
 // Frame wraps the accumulated payload in a BNLS packet header: a
 // little-endian WORD length (including this 3-byte header), then the
 // opcode byte, then the payload.
