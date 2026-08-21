@@ -1,0 +1,12 @@
+{
+  "listenPort": 9367,
+  "statsPort": 9368,
+  "profilesDirectory": "./profiles",
+  "sharedSecret": "Invigoration",
+  "defaultProfileIdByProduct": {
+    "WAR3": "warcraft3-1.26a",
+    "W3XP": "warcraft3-1.26a",
+    "D2DV": "diablo2-1.14d",
+    "D2XP": "diablo2-lod-1.14d"
+  }
+}

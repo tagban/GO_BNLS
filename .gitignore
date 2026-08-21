@@ -1,0 +1,19 @@
+# Build output
+/bin/
+/dist/
+*.exe
+*.test
+
+# Operator-supplied game files — never commit copyrighted binaries
+/profiles/*/
+!/profiles/.gitkeep
+
+# Local config overrides
+/configs/openbnls.json
+/configs/*.local.json
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
