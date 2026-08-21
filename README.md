@@ -12,7 +12,14 @@ binary per platform, built to be easy to run and maintain for years.
 
 ## Status
 
-Early scaffold. Not yet functional — see [Roadmap](#roadmap).
+Phase 1 core is up and integration-tested: a real TCP server answers
+AUTHORIZE/AUTHORIZEPROOF, REQUESTVERSIONBYTE, CDKEY/CDKEY_EX, HASHDATA, and
+VERSIONCHECKEX2 (CheckRevision) over the real wire format, driven in tests by
+a hand-rolled client rather than asserted against internals. **Not yet
+verified against a real BNLS-speaking game client or a real private server**
+— see the CheckRevision caveat below before trusting it in production. NLS/
+SRP (Warcraft III/TFT) and the remaining legacy/server-role opcodes aren't
+implemented yet — see [Roadmap](#roadmap).
 
 ## Provenance
 
@@ -47,31 +54,42 @@ where Warden doesn't apply.
 
 | Hex | Opcode | Status |
 |---|---|---|
-| 0x00 | BNLS_NULL | planned |
-| 0x01 | BNLS_CDKEY | planned |
-| 0x02 | BNLS_LOGONCHALLENGE | planned |
-| 0x03 | BNLS_LOGONPROOF | planned |
-| 0x04 | BNLS_CREATEACCOUNT | planned |
-| 0x05 | BNLS_CHANGECHALLENGE | planned |
-| 0x06 | BNLS_CHANGEPROOF | planned |
-| 0x07 | BNLS_UPGRADECHALLENGE | planned |
-| 0x08 | BNLS_UPGRADEPROOF | planned |
-| 0x09 | BNLS_VERSIONCHECK | planned |
-| 0x0A | BNLS_CONFIRMLOGON | planned |
-| 0x0B | BNLS_HASHDATA | planned |
-| 0x0C | BNLS_CDKEY_EX | planned |
-| 0x0D | BNLS_CHOOSENLSREVISION | planned |
-| 0x0E | BNLS_AUTHORIZE | planned |
-| 0x0F | BNLS_AUTHORIZEPROOF | planned |
-| 0x10 | BNLS_REQUESTVERSIONBYTE | planned |
-| 0x11 | BNLS_VERIFYSERVER | planned |
-| 0x12 | BNLS_RESERVESERVERSLOTS | planned |
-| 0x13 | BNLS_SERVERLOGONCHALLENGE | planned |
-| 0x14 | BNLS_SERVERLOGONPROOF | planned |
-| 0x18 | BNLS_VERSIONCHECKEX | planned |
-| 0x1A | BNLS_VERSIONCHECKEX2 | planned |
+| 0x00 | BNLS_NULL | done (no-op) |
+| 0x01 | BNLS_CDKEY | done |
+| 0x02 | BNLS_LOGONCHALLENGE | planned (Phase 2) |
+| 0x03 | BNLS_LOGONPROOF | planned (Phase 2) |
+| 0x04 | BNLS_CREATEACCOUNT | planned (Phase 2) |
+| 0x05 | BNLS_CHANGECHALLENGE | planned (Phase 3) |
+| 0x06 | BNLS_CHANGEPROOF | planned (Phase 3) |
+| 0x07 | BNLS_UPGRADECHALLENGE | planned (Phase 3) |
+| 0x08 | BNLS_UPGRADEPROOF | planned (Phase 3) |
+| 0x09 | BNLS_VERSIONCHECK | planned — legacy variant, not sent by any client this project currently tests against |
+| 0x0A | BNLS_CONFIRMLOGON | planned (Phase 3) |
+| 0x0B | BNLS_HASHDATA | done |
+| 0x0C | BNLS_CDKEY_EX | done |
+| 0x0D | BNLS_CHOOSENLSREVISION | planned (Phase 2) |
+| 0x0E | BNLS_AUTHORIZE | done (bnetdocs marks this exchange defunct; answered anyway since real clients still send it) |
+| 0x0F | BNLS_AUTHORIZEPROOF | done |
+| 0x10 | BNLS_REQUESTVERSIONBYTE | done |
+| 0x11 | BNLS_VERIFYSERVER | planned (Phase 4) |
+| 0x12 | BNLS_RESERVESERVERSLOTS | planned (Phase 4) |
+| 0x13 | BNLS_SERVERLOGONCHALLENGE | planned (Phase 4) |
+| 0x14 | BNLS_SERVERLOGONPROOF | planned (Phase 4) |
+| 0x18 | BNLS_VERSIONCHECKEX | planned — legacy variant, not sent by any client this project currently tests against |
+| 0x1A | BNLS_VERSIONCHECKEX2 | done, **but see the CheckRevision caveat below** |
 | 0x7D | BNLS_WARDEN | out of scope |
 | 0xFF | BNLS_IPBAN | planned (unofficial, not core spec) |
+
+### CheckRevision caveat
+
+VERSIONCHECKEX2's formula interpreter (`internal/checkrevision`) is built
+from a verbatim read of bnetdocs's CheckRevision document, but two details
+aren't documented anywhere found: the byte order of the 4-byte file chunks,
+and exactly how multiple hash files combine. Both are implemented as
+explicit, clearly-flagged assumptions (see that package's doc comment) and
+covered only by hand-computed unit tests — **not yet cross-checked against a
+real BNLS server's actual reply for a known formula/file pair.** Treat any
+computed checksum as unverified until that cross-check happens.
 
 ### Product support (target)
 
@@ -108,8 +126,11 @@ game files**; you supply your own legitimately-owned copies. See
 
 ## Roadmap
 
-- **Phase 0** (this commit): repo scaffold, CI, licensing.
-- **Phase 1**: core opcodes + CheckRevision + the 10 non-NLS products.
+- **Phase 0** (done): repo scaffold, CI, licensing.
+- **Phase 1** (core opcodes done, CheckRevision unverified): AUTHORIZE,
+  REQUESTVERSIONBYTE, CDKEY/CDKEY_EX, HASHDATA, and VERSIONCHECKEX2 are
+  implemented and integration-tested; the 10 non-NLS products can now go
+  through a full handshake, pending the CheckRevision cross-check above.
 - **Phase 2**: Warcraft III/TFT — NLS/SRP login and the 26-character CD-key format.
 - **Phase 3**: remaining bot-facing opcodes, connection stats endpoint, a
   version-profile-request extension for clients that want to pick a specific
