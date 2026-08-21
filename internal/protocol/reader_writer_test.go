@@ -6,7 +6,7 @@ import (
 )
 
 func TestFrame_ProducesCorrectHeaderAndLength(t *testing.T) {
-	frame := NewWriter().WriteByte(0x42).Frame(OpHashData)
+	frame := NewWriter().PutByte(0x42).Frame(OpHashData)
 
 	length := int(frame[0]) | int(frame[1])<<8
 	if length != len(frame) {
@@ -22,7 +22,7 @@ func TestFrame_ProducesCorrectHeaderAndLength(t *testing.T) {
 
 func TestReadWriteRoundTrip_PreservesValues(t *testing.T) {
 	frame := NewWriter().
-		WriteByte(0xAB).
+		PutByte(0xAB).
 		WriteWord(0x1234).
 		WriteDword(0xDEADBEEF).
 		WriteNTString("hello").
@@ -74,7 +74,7 @@ func TestReadFileTime_ReadsLowThenHighDword(t *testing.T) {
 }
 
 func TestReadPastEnd_ReturnsErrShortBuffer(t *testing.T) {
-	frame := NewWriter().WriteByte(0x01).Frame(OpNull)
+	frame := NewWriter().PutByte(0x01).Frame(OpNull)
 	r := PayloadReader(frame)
 
 	if _, err := r.ReadByte(); err != nil {

@@ -8,7 +8,10 @@ type Writer struct {
 // NewWriter returns an empty Writer.
 func NewWriter() *Writer { return &Writer{} }
 
-func (w *Writer) WriteByte(v byte) *Writer {
+// PutByte appends a single byte. (Named PutByte rather than WriteByte to
+// avoid colliding with io.ByteWriter's WriteByte(byte) error signature,
+// which go vet checks method names against even for unrelated types.)
+func (w *Writer) PutByte(v byte) *Writer {
 	w.buf = append(w.buf, v)
 	return w
 }
