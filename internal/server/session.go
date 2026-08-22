@@ -28,7 +28,8 @@ type Session struct {
 
 	// Handshake state accumulated across the session.
 	challenge uint32
-	product   string // short BNLS product name (e.g. "W3XP"), once known
+	product   string             // short BNLS product name (e.g. "W3XP"), once known
+	profile   *profiles.Profile  // selected by REQUESTVERSIONBYTE, reused by VERSIONCHECKEX2
 }
 
 func newSession(conn net.Conn, catalog *profiles.Catalog, sharedSecret string, logger *log.Logger, stats *Stats) *Session {

@@ -141,6 +141,128 @@ func TestRequestVersionByte_KnownProduct_ReturnsProfileVersionByte(t *testing.T)
 	}
 }
 
+func TestRequestVersionByte_RequestedProfileExtension(t *testing.T) {
+	root := t.TempDir()
+	writeTestProfile(t, root, "retail", `{"product":"W2BN","profileId":"retail","versionByte":79,"hashFiles":["a.exe"]}`,
+		map[string][]byte{"a.exe": {1}})
+	writeTestProfile(t, root, "gog", `{"product":"W2BN","profileId":"gog","versionByte":80,"hashFiles":["a.exe"]}`,
+		map[string][]byte{"a.exe": {1}})
+	catalog, err := profiles.LoadCatalog(root, map[string]string{"W2BN": "retail"})
+	if err != nil {
+		t.Fatalf("profiles.LoadCatalog() error = %v", err)
+	}
+
+	productByte, _ := protocol.ProductByteForName("W2BN")
+
+	t.Run("no trailing field uses the default profile", func(t *testing.T) {
+		conn := startTestServer(t, catalog)
+		if _, err := conn.Write(protocol.NewWriter().WriteDword(uint32(productByte)).Frame(protocol.OpRequestVersionByte)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		r := protocol.PayloadReader(readFrame(t, conn))
+		_, _ = r.ReadDword()
+		versionByte, _ := r.ReadDword()
+		if versionByte != 79 {
+			t.Errorf("version byte = %d, want 79 (default/retail)", versionByte)
+		}
+	})
+
+	t.Run("trailing profile id selects the named profile", func(t *testing.T) {
+		conn := startTestServer(t, catalog)
+		req := protocol.NewWriter().WriteDword(uint32(productByte)).WriteNTString("gog").Frame(protocol.OpRequestVersionByte)
+		if _, err := conn.Write(req); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		r := protocol.PayloadReader(readFrame(t, conn))
+		_, _ = r.ReadDword()
+		versionByte, _ := r.ReadDword()
+		if versionByte != 80 {
+			t.Errorf("version byte = %d, want 80 (gog)", versionByte)
+		}
+	})
+
+	t.Run("unknown trailing profile id falls back to default", func(t *testing.T) {
+		conn := startTestServer(t, catalog)
+		req := protocol.NewWriter().WriteDword(uint32(productByte)).WriteNTString("nonexistent").Frame(protocol.OpRequestVersionByte)
+		if _, err := conn.Write(req); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		r := protocol.PayloadReader(readFrame(t, conn))
+		_, _ = r.ReadDword()
+		versionByte, _ := r.ReadDword()
+		if versionByte != 79 {
+			t.Errorf("version byte = %d, want 79 (falls back to default)", versionByte)
+		}
+	})
+}
+
+func TestVersionCheckEx2_UsesTheProfileSelectedByRequestVersionByte(t *testing.T) {
+	root := t.TempDir()
+	// Files are exactly 1024 bytes so PadToBoundary is a no-op, keeping the
+	// expected checksum simple to hand-verify (only the first 4-byte chunk
+	// is nonzero).
+	retailFile := make([]byte, 1024)
+	retailFile[0] = 1
+	gogFile := make([]byte, 1024)
+	gogFile[0] = 2
+
+	writeTestProfile(t, root, "retail", `{
+		"product": "W2BN", "profileId": "retail", "versionByte": 79,
+		"exeVersion": 111, "exeInfoTemplate": "retail",
+		"hashFiles": ["file.bin"]
+	}`, map[string][]byte{"file.bin": retailFile})
+	writeTestProfile(t, root, "gog", `{
+		"product": "W2BN", "profileId": "gog", "versionByte": 80,
+		"exeVersion": 222, "exeInfoTemplate": "gog",
+		"hashFiles": ["file.bin"]
+	}`, map[string][]byte{"file.bin": gogFile})
+	catalog, err := profiles.LoadCatalog(root, map[string]string{"W2BN": "retail"})
+	if err != nil {
+		t.Fatalf("profiles.LoadCatalog() error = %v", err)
+	}
+
+	conn := startTestServer(t, catalog)
+	productByte, _ := protocol.ProductByteForName("W2BN")
+
+	// Select the "gog" profile explicitly, not the default.
+	req := protocol.NewWriter().WriteDword(uint32(productByte)).WriteNTString("gog").Frame(protocol.OpRequestVersionByte)
+	if _, err := conn.Write(req); err != nil {
+		t.Fatalf("Write(REQUESTVERSIONBYTE) error = %v", err)
+	}
+	readFrame(t, conn) // discard the REQUESTVERSIONBYTE reply
+
+	versionReq := protocol.NewWriter().
+		WriteDword(uint32(productByte)).
+		WriteDword(0).
+		WriteDword(0xBEEF).
+		WriteDword(0).WriteDword(0).
+		WriteNTString("not-a-known-mpq-name"). // ok=false -> hash code 0, doesn't matter for this test
+		WriteNTString("A=0 B=0 C=0 1 C=C+S").
+		Frame(protocol.OpVersionCheckEx2)
+	if _, err := conn.Write(versionReq); err != nil {
+		t.Fatalf("Write(VERSIONCHECKEX2) error = %v", err)
+	}
+
+	r := protocol.PayloadReader(readFrame(t, conn))
+	success, _ := r.ReadBoolean()
+	exeVersion, _ := r.ReadDword()
+	checksum, _ := r.ReadDword()
+	exeInfo, _ := r.ReadNTString()
+
+	if !success {
+		t.Fatal("success = false, want true")
+	}
+	if exeVersion != 222 {
+		t.Errorf("exeVersion = %d, want 222 (the gog profile's, not retail's 111)", exeVersion)
+	}
+	if exeInfo != "gog" {
+		t.Errorf("exeInfo = %q, want %q", exeInfo, "gog")
+	}
+	if checksum != 2 { // C=C+S with file.bin={2,0,0,0} -> S=2, C=0+2=2
+		t.Errorf("checksum = %d, want 2 (hashed the gog profile's file.bin, not retail's)", checksum)
+	}
+}
+
 func TestRequestVersionByte_UnknownProduct_RepliesWithZero(t *testing.T) {
 	conn := startTestServer(t, emptyCatalog(t))
 

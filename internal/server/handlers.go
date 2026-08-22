@@ -5,6 +5,7 @@ import (
 
 	"github.com/tagban/GO_BNLS/internal/checkrevision"
 	"github.com/tagban/GO_BNLS/internal/crypto"
+	"github.com/tagban/GO_BNLS/internal/profiles"
 	"github.com/tagban/GO_BNLS/internal/protocol"
 )
 
@@ -43,14 +44,35 @@ func (s *Session) handleAuthorizeProof(r *protocol.Reader) error {
 }
 
 // handleRequestVersionByte answers BNLS_REQUESTVERSIONBYTE with the
-// product's configured default profile's version byte. Reply is two
-// DWORDs — the echoed product byte, then the actual version byte — matching
-// what Invigoration's client (and, per its own history, real BNCS servers)
+// selected profile's version byte, and remembers that profile on the
+// session so the later VERSIONCHECKEX2 request hashes the SAME profile's
+// files rather than re-resolving the product's default independently —
+// otherwise a non-default profile selected here would only affect this
+// reply, not the checksum that actually matters.
+//
+// Stock request payload is just a DWORD product byte, and gets the
+// product's configured default profile — this server stays a transparent
+// drop-in for any unmodified BNLS client. A client that wants a specific
+// non-default profile (e.g. distinguishing a GOG repack's different patch
+// revision from retail, both nominally the same product) can append an
+// optional trailing NTString naming the profile id; this is safe for any
+// other BNLS client to ignore-by-omission, since BNLS frames are
+// explicit-length, not delimiter-terminated. Reply is two DWORDs — the
+// echoed product byte, then the actual version byte — matching what
+// Invigoration's client (and, per its own history, real BNCS servers)
 // expects; a single-DWORD reply was a real bug caught earlier this project.
 func (s *Session) handleRequestVersionByte(r *protocol.Reader) error {
 	productDword, err := r.ReadDword()
 	if err != nil {
 		return fmt.Errorf("REQUESTVERSIONBYTE: %w", err)
+	}
+
+	var requestedProfileID string
+	if r.Remaining() > 0 {
+		requestedProfileID, err = r.ReadNTString()
+		if err != nil {
+			return fmt.Errorf("REQUESTVERSIONBYTE: requested profile id: %w", err)
+		}
 	}
 
 	name, ok := protocol.ProductName(productByteFromDword(productDword))
@@ -61,11 +83,22 @@ func (s *Session) handleRequestVersionByte(r *protocol.Reader) error {
 	s.product = name
 	s.stats.RecordProductRequest(name)
 
-	profile, ok := s.catalog.Default(name)
-	if !ok {
+	var profile *profiles.Profile
+	var profileFound bool
+	if requestedProfileID != "" {
+		profile, profileFound = s.catalog.Get(name, requestedProfileID)
+		if !profileFound {
+			s.logger.Printf("%s: requested profile %s/%s not found, falling back to default", s.remoteAddr, name, requestedProfileID)
+		}
+	}
+	if !profileFound {
+		profile, profileFound = s.catalog.Default(name)
+	}
+	if !profileFound {
 		s.logger.Printf("%s: no profile configured for product %s, replying with version byte 0", s.remoteAddr, name)
 		return s.send(protocol.NewWriter().WriteDword(productDword).WriteDword(0).Frame(protocol.OpRequestVersionByte))
 	}
+	s.profile = profile
 
 	return s.send(protocol.NewWriter().WriteDword(productDword).WriteDword(profile.VersionByte).Frame(protocol.OpRequestVersionByte))
 }
@@ -180,10 +213,11 @@ func (s *Session) handleCDKeyEx(r *protocol.Reader) error {
 }
 
 // handleVersionCheckEx2 answers BNLS_VERSIONCHECKEX2 by running the
-// server-supplied CheckRevision formula against the product's configured
-// profile's game files. See internal/checkrevision's package doc for the
-// documented-vs-assumed parts of this computation — unverified against a
-// real BNLS server as of this commit.
+// server-supplied CheckRevision formula against the profile REQUESTVERSIONBYTE
+// selected for this session (see Session.profile's doc comment) — not by
+// re-resolving the product's default independently, since a non-default
+// profile requested there (e.g. a GOG build vs retail) needs to stay in
+// effect for the checksum that actually matters here.
 func (s *Session) handleVersionCheckEx2(r *protocol.Reader) error {
 	productDword, err := r.ReadDword()
 	if err != nil {
@@ -216,8 +250,14 @@ func (s *Session) handleVersionCheckEx2(r *protocol.Reader) error {
 		return s.sendVersionCheckEx2Failure(cookie)
 	}
 
-	profile, ok := s.catalog.Default(name)
-	if !ok {
+	profile := s.profile
+	if profile == nil || profile.Product != name {
+		// No REQUESTVERSIONBYTE for this product preceded this request
+		// (a malformed/unusual client) — fall back to the product's default
+		// rather than failing outright.
+		profile, ok = s.catalog.Default(name)
+	}
+	if profile == nil {
 		s.logger.Printf("%s: VERSIONCHECKEX2 for %s with no configured profile", s.remoteAddr, name)
 		return s.sendVersionCheckEx2Failure(cookie)
 	}
