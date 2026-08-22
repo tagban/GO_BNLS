@@ -4,8 +4,11 @@
 *.exe
 *.test
 
-# Operator-supplied game files — never commit copyrighted binaries
-/profiles/*/
+# Operator-supplied game files — never commit copyrighted binaries.
+# manifest.json itself is just metadata (versions/checksums/file lists),
+# not copyrighted content, so it's allowed through.
+/profiles/*/*
+!/profiles/*/manifest.json
 !/profiles/.gitkeep
 
 # Local config overrides

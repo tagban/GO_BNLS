@@ -9,16 +9,24 @@ import (
 // manifest order), returning the final checksum (the formula's C value
 // after every chunk of every file has been processed).
 //
+// CONFIRMED LIVE (2026-08-21): this function, fed a real Warcraft II: BNE
+// install's exe/storm.dll/battle.snp (in that order) and the hash code
+// HashCodeForMpqFileName derives from a real "ver-IX86-1.mpq" mpqFileName,
+// reproduced bnls.bnetdocs.org's actual BNLS_VERSIONCHECKEX2 reply checksum
+// exactly (0xB52BAD87) for a real formula captured from a live SID_AUTH_INFO
+// exchange with atlas.bnetdocs.org — and Invigoration, pointed at a local
+// instance of this server instead of the public one, completed a full real
+// login through it. Not just theoretically correct: this is the actual
+// end-to-end proof the project's Risk section called for.
+//
 // hashCode is XOR'd into the seed A value exactly once, before any file's
 // bytes are processed — see HashCodeForMpqFileName for how a real client
 // derives this from the mpqFileName field it sends alongside the formula.
 // This corrects an earlier mistaken guess in this package's history (a
-// per-file hash code, XOR'd before each file's own loop). Confirmed against
-// two independent sources — the project owner's own original CheckRevision
-// implementation, and the MIT-licensed github.com/BNETDocs/MBNCSUtil's
-// CheckRevision.cs — that it's a single value derived from the mpq/patch
-// identity, applied once for the whole multi-file set, not one value per
-// file.
+// per-file hash code, XOR'd before each file's own loop) — confirmed
+// against the project owner's own original CheckRevision implementation and
+// the MIT-licensed github.com/BNETDocs/MBNCSUtil's CheckRevision.cs, then
+// verified live as above.
 //
 // 4-byte chunks are read little-endian, consistent with every other DWORD
 // in this protocol family. Callers should run every file through
@@ -29,8 +37,11 @@ import (
 // that forgets to pad still gets a defined result rather than a crash).
 //
 // Every file's chunks flow through the same running A/B/C state, in the
-// order given, rather than resetting between files — also confirmed
-// against both reference sources.
+// order given, rather than resetting between files — also confirmed live.
+// Which files, and in what order, is itself product-specific and not
+// carried on the wire anywhere — it has to be known per profile (see
+// profiles.Profile.HashFiles); for Warcraft II: BNE it's exe, then
+// storm.dll, then battle.snp, confirmed by the live test above.
 func Evaluate(f *Formula, files [][]byte, hashCode uint32) (uint32, error) {
 	if len(files) == 0 {
 		return 0, fmt.Errorf("checkrevision: no files to hash")

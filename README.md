@@ -12,15 +12,16 @@ binary per platform, built to be easy to run and maintain for years.
 
 ## Status
 
-Phase 1 core is up and integration-tested: a real TCP server answers
+**Phase 1 core is verified live, end to end.** A real instance of this
+server, given a real Warcraft II: BNE install, reproduced a real
+`bnls.bnetdocs.org` reply's exact checksum for the same file/formula, and a
+real Invigoration bot logged all the way in through it (not the public
+server — this one) against `atlas.bnetdocs.org`: version check, CD-key
+check, and chat login all passed. That's genuine proof for one product;
 AUTHORIZE/AUTHORIZEPROOF, REQUESTVERSIONBYTE, CDKEY/CDKEY_EX, HASHDATA, and
-VERSIONCHECKEX2 (CheckRevision) over the real wire format, driven in tests by
-a hand-rolled client rather than asserted against internals. CheckRevision's
-previously-open questions (file padding, per-mpq hash codes) are now
-confirmed against two independent sources rather than guessed — see
-Provenance below. **Still not yet run against a real BNLS-speaking game
-client or a real private server end to end.** NLS/SRP (Warcraft III/TFT) and
-the remaining legacy/server-role opcodes aren't implemented yet — see
+VERSIONCHECKEX2 (CheckRevision) are all implemented and both integration-
+tested and now live-tested. NLS/SRP (Warcraft III/TFT) and the remaining
+legacy/server-role opcodes aren't implemented yet — see
 [Roadmap](#roadmap).
 
 ## Provenance
@@ -87,22 +88,28 @@ where Warden doesn't apply.
 | 0x13 | BNLS_SERVERLOGONCHALLENGE | planned (Phase 4) |
 | 0x14 | BNLS_SERVERLOGONPROOF | planned (Phase 4) |
 | 0x18 | BNLS_VERSIONCHECKEX | planned — legacy variant, not sent by any client this project currently tests against |
-| 0x1A | BNLS_VERSIONCHECKEX2 | done, **but see the CheckRevision caveat below** |
+| 0x1A | BNLS_VERSIONCHECKEX2 | done, **verified live** — see below |
 | 0x7D | BNLS_WARDEN | out of scope |
 | 0xFF | BNLS_IPBAN | planned (unofficial, not core spec) |
 
-### CheckRevision caveat
+### CheckRevision — verified live
 
 VERSIONCHECKEX2's formula interpreter (`internal/checkrevision`) started
-from a verbatim read of bnetdocs's CheckRevision document, and the details
-that document left open — the per-mpq hash code table, the 1024-byte
-descending-byte file padding, and how multiple hash files combine — are now
-confirmed against two independent sources (see Provenance above), not
-guessed. What's still genuinely unverified: this has only been tested
-against synthetic in-memory byte slices in unit/integration tests, never
-against a real game client's actual executable or a real BNLS server's
-real-world reply. Treat it as very likely correct, not proven correct, until
-that end-to-end check happens.
+from a verbatim read of bnetdocs's CheckRevision document; the details that
+document left open — the per-mpq hash code table, the 1024-byte descending-
+byte file padding, and how multiple hash files combine — were then confirmed
+against two independent sources (see Provenance above). On 2026-08-21 this
+was verified against reality: fed a real Warcraft II: BNE install's exe,
+`storm.dll`, and `battle.snp` (in that order) and a formula captured from a
+live SID_AUTH_INFO exchange with `atlas.bnetdocs.org`, this server's
+computed checksum matched `bnls.bnetdocs.org`'s real reply for the same
+inputs exactly, and a real Invigoration client completed a full login
+through this server against `atlas.bnetdocs.org` — version check, CD-key
+check, and chat entry all passed. One product proven end to end; other
+products still need their own hash-file lists and orders confirmed the same
+way before being trusted (see `profiles.Profile.HashFiles` — which files,
+and in what order, is product-specific and isn't carried on the wire
+anywhere, so it has to be established per product rather than assumed).
 
 ### Product support (target)
 
@@ -140,10 +147,13 @@ game files**; you supply your own legitimately-owned copies. See
 ## Roadmap
 
 - **Phase 0** (done): repo scaffold, CI, licensing.
-- **Phase 1** (core opcodes done, CheckRevision unverified): AUTHORIZE,
+- **Phase 1** (core opcodes done, verified live for one product): AUTHORIZE,
   REQUESTVERSIONBYTE, CDKEY/CDKEY_EX, HASHDATA, and VERSIONCHECKEX2 are
-  implemented and integration-tested; the 10 non-NLS products can now go
-  through a full handshake, pending the CheckRevision cross-check above.
+  implemented, integration-tested, and confirmed against a real server for
+  Warcraft II: BNE (see Status above). The other 9 non-NLS products should
+  work the same way but need their own profile (hash-file list/order,
+  version byte, exe info) built and confirmed the same way before trusting
+  them.
 - **Phase 2**: Warcraft III/TFT — NLS/SRP login and the 26-character CD-key format.
 - **Phase 3**: remaining bot-facing opcodes, connection stats endpoint, a
   version-profile-request extension for clients that want to pick a specific
