@@ -15,11 +15,13 @@ binary per platform, built to be easy to run and maintain for years.
 Phase 1 core is up and integration-tested: a real TCP server answers
 AUTHORIZE/AUTHORIZEPROOF, REQUESTVERSIONBYTE, CDKEY/CDKEY_EX, HASHDATA, and
 VERSIONCHECKEX2 (CheckRevision) over the real wire format, driven in tests by
-a hand-rolled client rather than asserted against internals. **Not yet
-verified against a real BNLS-speaking game client or a real private server**
-— see the CheckRevision caveat below before trusting it in production. NLS/
-SRP (Warcraft III/TFT) and the remaining legacy/server-role opcodes aren't
-implemented yet — see [Roadmap](#roadmap).
+a hand-rolled client rather than asserted against internals. CheckRevision's
+previously-open questions (file padding, per-mpq hash codes) are now
+confirmed against two independent sources rather than guessed — see
+Provenance below. **Still not yet run against a real BNLS-speaking game
+client or a real private server end to end.** NLS/SRP (Warcraft III/TFT) and
+the remaining legacy/server-role opcodes aren't implemented yet — see
+[Roadmap](#roadmap).
 
 ## Provenance
 
@@ -39,6 +41,15 @@ tested implementations in a companion C# project
 ([Invigoration](https://github.com/tagban/invigoration)) and was ported to Go
 — reusing already-solved, already-verified math rather than re-deriving it,
 while every line here is original Go code.
+
+CheckRevision's file-hashing details (the per-mpq hash code table and
+lookup, and the 1024-byte file padding scheme) were confirmed against two
+sources the project owner provided directly: their own original
+CheckRevision implementation (authored by them, ported from an old Google
+Code project of theirs, and explicitly authorized for use here), and the
+MIT-licensed, actively-maintained
+[BNETDocs/MBNCSUtil](https://github.com/BNETDocs/MBNCSUtil)'s
+`CheckRevision.cs` — both independently confirming the same behavior.
 
 ## Scope
 
@@ -82,14 +93,16 @@ where Warden doesn't apply.
 
 ### CheckRevision caveat
 
-VERSIONCHECKEX2's formula interpreter (`internal/checkrevision`) is built
-from a verbatim read of bnetdocs's CheckRevision document, but two details
-aren't documented anywhere found: the byte order of the 4-byte file chunks,
-and exactly how multiple hash files combine. Both are implemented as
-explicit, clearly-flagged assumptions (see that package's doc comment) and
-covered only by hand-computed unit tests — **not yet cross-checked against a
-real BNLS server's actual reply for a known formula/file pair.** Treat any
-computed checksum as unverified until that cross-check happens.
+VERSIONCHECKEX2's formula interpreter (`internal/checkrevision`) started
+from a verbatim read of bnetdocs's CheckRevision document, and the details
+that document left open — the per-mpq hash code table, the 1024-byte
+descending-byte file padding, and how multiple hash files combine — are now
+confirmed against two independent sources (see Provenance above), not
+guessed. What's still genuinely unverified: this has only been tested
+against synthetic in-memory byte slices in unit/integration tests, never
+against a real game client's actual executable or a real BNLS server's
+real-world reply. Treat it as very likely correct, not proven correct, until
+that end-to-end check happens.
 
 ### Product support (target)
 

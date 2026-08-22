@@ -202,7 +202,8 @@ func (s *Session) handleVersionCheckEx2(r *protocol.Reader) error {
 	if _, err := r.ReadDword(); err != nil { // MPQ file time high, unused
 		return fmt.Errorf("VERSIONCHECKEX2: mpq file time high: %w", err)
 	}
-	if _, err := r.ReadNTString(); err != nil { // MPQ file name, unused
+	mpqFileName, err := r.ReadNTString()
+	if err != nil {
 		return fmt.Errorf("VERSIONCHECKEX2: mpq file name: %w", err)
 	}
 	formulaText, err := r.ReadNTString()
@@ -232,8 +233,16 @@ func (s *Session) handleVersionCheckEx2(r *protocol.Reader) error {
 		s.logger.Printf("%s: VERSIONCHECKEX2 loading profile files: %v", s.remoteAddr, err)
 		return s.sendVersionCheckEx2Failure(cookie)
 	}
+	for i, f := range files {
+		files[i] = checkrevision.PadToBoundary(f, 1024)
+	}
 
-	checksum, err := checkrevision.Evaluate(formula, files, profile.FileHashCodes)
+	hashCode, ok := checkrevision.HashCodeForMpqFileName(mpqFileName)
+	if !ok {
+		s.logger.Printf("%s: VERSIONCHECKEX2 mpqFileName %q doesn't match a known naming convention, using hash code 0", s.remoteAddr, mpqFileName)
+	}
+
+	checksum, err := checkrevision.Evaluate(formula, files, hashCode)
 	if err != nil {
 		s.logger.Printf("%s: VERSIONCHECKEX2 evaluate error: %v", s.remoteAddr, err)
 		return s.sendVersionCheckEx2Failure(cookie)

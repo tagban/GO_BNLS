@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/tagban/GO_BNLS/internal/checkrevision"
 	"github.com/tagban/GO_BNLS/internal/crypto"
 	"github.com/tagban/GO_BNLS/internal/profiles"
 	"github.com/tagban/GO_BNLS/internal/protocol"
@@ -241,18 +242,18 @@ func TestCDKeyEx_OneValidOneInvalid_PartialSuccess(t *testing.T) {
 
 func TestVersionCheckEx2_ComputesChecksumFromProfile(t *testing.T) {
 	root := t.TempDir()
-	// Same formula/file/expected-checksum as
-	// internal/checkrevision's TestEvaluate_SingleChunkSingleFile test —
-	// exercised here through the actual wire protocol end to end.
+	fileBytes := []byte{1, 0, 0, 0}
+	const formulaText = "A=1 B=2 C=3 4 A=A+S B=B+S C=C+S A=A+B"
+	const mpqFileName = "ver-IX86-1.mpq"
+
 	writeTestProfile(t, root, "test-profile", `{
 		"product": "STAR",
 		"profileId": "test-profile",
 		"versionByte": 1,
 		"exeVersion": 42,
 		"exeInfoTemplate": "starcraft.exe test",
-		"hashFiles": ["file.bin"],
-		"fileHashCodes": [0]
-	}`, map[string][]byte{"file.bin": {1, 0, 0, 0}})
+		"hashFiles": ["file.bin"]
+	}`, map[string][]byte{"file.bin": fileBytes})
 
 	catalog, err := profiles.LoadCatalog(root, map[string]string{"STAR": "test-profile"})
 	if err != nil {
@@ -267,8 +268,8 @@ func TestVersionCheckEx2_ComputesChecksumFromProfile(t *testing.T) {
 		WriteDword(0).      // flags
 		WriteDword(0xCAFE). // cookie
 		WriteDword(0).WriteDword(0). // mpq file time
-		WriteNTString("ver-IX86-1.mpq").
-		WriteNTString("A=1 B=2 C=3 4 A=A+S B=B+S C=C+S A=A+B").
+		WriteNTString(mpqFileName).
+		WriteNTString(formulaText).
 		Frame(protocol.OpVersionCheckEx2)
 	if _, err := conn.Write(req); err != nil {
 		t.Fatalf("Write() error = %v", err)
@@ -287,14 +288,35 @@ func TestVersionCheckEx2_ComputesChecksumFromProfile(t *testing.T) {
 	if exeVersion != 42 {
 		t.Errorf("exeVersion = %d, want 42", exeVersion)
 	}
-	if checksum != 4 {
-		t.Errorf("checksum = %d, want 4 (see checkrevision.TestEvaluate_SingleChunkSingleFile for the hand-computed trace)", checksum)
-	}
 	if exeInfo != "starcraft.exe test" {
 		t.Errorf("exeInfo = %q, want %q", exeInfo, "starcraft.exe test")
 	}
 	if cookieEcho != 0xCAFE {
 		t.Errorf("cookieEcho = 0x%X, want 0xCAFE", cookieEcho)
+	}
+
+	// Rather than hand-tracing 256 chunks of arithmetic (fileBytes gets
+	// padded to 1024 bytes), verify the server's WIRING — that it loads the
+	// profile's file, pads it, derives the hash code from mpqFileName, and
+	// calls Evaluate — by independently reproducing those same steps here
+	// and comparing. The arithmetic itself is covered by
+	// internal/checkrevision's own hand-traced unit tests.
+	formula, err := checkrevision.ParseFormula(formulaText)
+	if err != nil {
+		t.Fatalf("checkrevision.ParseFormula() error = %v", err)
+	}
+	hashCode, ok := checkrevision.HashCodeForMpqFileName(mpqFileName)
+	if !ok {
+		t.Fatalf("checkrevision.HashCodeForMpqFileName(%q) ok = false", mpqFileName)
+	}
+	padded := checkrevision.PadToBoundary(fileBytes, 1024)
+	want, err := checkrevision.Evaluate(formula, [][]byte{padded}, hashCode)
+	if err != nil {
+		t.Fatalf("checkrevision.Evaluate() error = %v", err)
+	}
+
+	if checksum != want {
+		t.Errorf("checksum = %d, want %d", checksum, want)
 	}
 }
 

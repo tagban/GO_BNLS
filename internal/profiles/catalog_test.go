@@ -48,9 +48,6 @@ func TestLoadCatalog_LoadsValidProfile(t *testing.T) {
 	if p.VersionByte != 26 {
 		t.Errorf("p.VersionByte = %d, want 26", p.VersionByte)
 	}
-	if len(p.FileHashCodes) != 1 || p.FileHashCodes[0] != 0 {
-		t.Errorf("p.FileHashCodes = %v, want [0] (default when omitted from manifest)", p.FileHashCodes)
-	}
 
 	def, ok := catalog.Default("W3XP")
 	if !ok || def != p {
@@ -87,13 +84,12 @@ func TestLoadCatalog_IgnoresNonProfileDirectories(t *testing.T) {
 	}
 }
 
-func TestLoadCatalog_ExplicitFileHashCodes_ArePreserved(t *testing.T) {
+func TestLoadCatalog_MultipleHashFiles_LoadInManifestOrder(t *testing.T) {
 	root := t.TempDir()
 	writeProfile(t, root, "diablo2", `{
 		"product": "D2DV",
 		"profileId": "diablo2",
-		"hashFiles": ["Game.exe", "Storm.dll"],
-		"fileHashCodes": [3, 5]
+		"hashFiles": ["Game.exe", "Storm.dll"]
 	}`, map[string][]byte{"Game.exe": {1}, "Storm.dll": {2}})
 
 	catalog, err := LoadCatalog(root, nil)
@@ -104,10 +100,6 @@ func TestLoadCatalog_ExplicitFileHashCodes_ArePreserved(t *testing.T) {
 	p, ok := catalog.Get("D2DV", "diablo2")
 	if !ok {
 		t.Fatal("catalog.Get() ok = false, want true")
-	}
-	want := []uint32{3, 5}
-	if len(p.FileHashCodes) != 2 || p.FileHashCodes[0] != want[0] || p.FileHashCodes[1] != want[1] {
-		t.Errorf("p.FileHashCodes = %v, want %v", p.FileHashCodes, want)
 	}
 
 	files, err := p.LoadFiles()

@@ -22,13 +22,6 @@ type Profile struct {
 	ExeInfoTemplate string   `json:"exeInfoTemplate"`
 	HashFiles       []string `json:"hashFiles"`
 
-	// FileHashCodes is the per-file "hash code" (0-7 per bnetdocs, exact
-	// per-file value undocumented) CheckRevision XORs into its running A
-	// value before that file's chunk loop. Defaults to all zeros if absent
-	// from the manifest — an explicit placeholder, not a verified value; see
-	// internal/checkrevision's package doc.
-	FileHashCodes []uint32 `json:"fileHashCodes"`
-
 	dir string // directory containing manifest.json and the hash files
 }
 
@@ -60,12 +53,6 @@ func loadProfile(dir string) (*Profile, error) {
 
 	if len(p.HashFiles) == 0 {
 		return nil, fmt.Errorf("%s: manifest has no hashFiles", manifestPath)
-	}
-	if len(p.FileHashCodes) == 0 {
-		p.FileHashCodes = make([]uint32, len(p.HashFiles))
-	}
-	if len(p.FileHashCodes) != len(p.HashFiles) {
-		return nil, fmt.Errorf("%s: %d fileHashCodes for %d hashFiles", manifestPath, len(p.FileHashCodes), len(p.HashFiles))
 	}
 
 	// Fail fast on a missing hash file: a wrong/incomplete CheckRevision
